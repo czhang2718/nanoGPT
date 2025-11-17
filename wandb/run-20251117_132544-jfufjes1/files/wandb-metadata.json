@@ -1,0 +1,64 @@
+{
+  "os":  "Linux-5.14.0-503.38.1.el9_5.x86_64-x86_64-with-glibc2.34",
+  "python":  "3.11.11",
+  "startedAt":  "2025-11-17T19:25:44.936912Z",
+  "args":  [
+    "config/train_shakespeare_char.py"
+  ],
+  "program":  "/work1/sawmya/czhang/6.4610/Multi-resolution-Attention/external/nanogpt/train.py",
+  "codePath":  "train.py",
+  "git":  {
+    "remote":  "https://github.com/karpathy/nanoGPT",
+    "commit":  "93a43d9a5c22450bbf06e78da2cb6eeef084b717"
+  },
+  "email":  "clairefz@mit.edu",
+  "root":  "/work1/sawmya/czhang/6.4610/Multi-resolution-Attention/external/nanogpt",
+  "host":  "login1.hpcfund",
+  "username":  "czhang",
+  "executable":  "/work1/sawmya/czhang/micromamba/envs/rebm/bin/python",
+  "codePathLocal":  "train.py",
+  "cpu_count":  128,
+  "cpu_count_logical":  128,
+  "gpu_count":  2,
+  "disk":  {
+    "/":  {
+      "total":  "1755842580480",
+      "used":  "191803924480"
+    }
+  },
+  "memory":  {
+    "total":  "540312723456"
+  },
+  "cpu":  {
+    "count":  128,
+    "countLogical":  128
+  },
+  "gpu_amd":  [
+    {
+      "id":  "0x740f",
+      "uniqueId":  "0x5ddd62b9ada0148c",
+      "vbiosVersion":  "113-D67301V-073",
+      "performanceLevel":  "auto",
+      "maxPower":  "300.0",
+      "series":  "N/A",
+      "model":  "0x740f",
+      "vendor":  "Advanced Micro Devices, Inc. [AMD/ATI]",
+      "sku":  "D67301V",
+      "sclkRange":  "500Mhz - 1700Mhz",
+      "mclkRange":  "400Mhz - 1600Mhz"
+    },
+    {
+      "id":  "0x740f",
+      "uniqueId":  "0x9e8d2ffb809e9464",
+      "vbiosVersion":  "113-D67301V-073",
+      "performanceLevel":  "auto",
+      "maxPower":  "300.0",
+      "series":  "N/A",
+      "model":  "0x740f",
+      "vendor":  "Advanced Micro Devices, Inc. [AMD/ATI]",
+      "sku":  "D67301V",
+      "sclkRange":  "500Mhz - 1700Mhz",
+      "mclkRange":  "400Mhz - 1600Mhz"
+    }
+  ]
+}

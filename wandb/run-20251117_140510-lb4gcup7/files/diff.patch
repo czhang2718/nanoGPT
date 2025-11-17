@@ -1,0 +1,154 @@
+diff --git a/config/train_shakespeare_char.py b/config/train_shakespeare_char.py
+index 41c81df..371c58c 100644
+--- a/config/train_shakespeare_char.py
++++ b/config/train_shakespeare_char.py
+@@ -1,7 +1,7 @@
+ # train a miniature character-level shakespeare model
+ # good for debugging and playing on macbooks and such
+ 
+-out_dir = 'out-shakespeare-char'
++out_dir = 'out-shakespeare-char-baseline'
+ eval_interval = 250 # keep frequent because we'll overfit
+ eval_iters = 200
+ log_interval = 10 # don't print too too often
+@@ -9,17 +9,18 @@ log_interval = 10 # don't print too too often
+ # we expect to overfit on this small dataset, so only save when val improves
+ always_save_checkpoint = False
+ 
+-wandb_log = False # override via command line if you like
++wandb_log = True # override via command line if you like
+ wandb_project = 'shakespeare-char'
+-wandb_run_name = 'mini-gpt'
++wandb_run_name = 'mini-gpt-baseline'
+ 
+ dataset = 'shakespeare_char'
+ gradient_accumulation_steps = 1
+ batch_size = 64
+ block_size = 256 # context of up to 256 previous characters
++merged_attn = False
+ 
+ # baby GPT model :)
+-n_layer = 6
++n_layer = 12
+ n_head = 6
+ n_embd = 384
+ dropout = 0.2
+diff --git a/model.py b/model.py
+index c698f8b..ae8d9e0 100644
+--- a/model.py
++++ b/model.py
+@@ -49,6 +49,55 @@ class CausalSelfAttention(nn.Module):
+             self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))
+                                         .view(1, 1, config.block_size, config.block_size))
+ 
++    def forward(self, x):
++        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
++
++        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
++        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)
++        # Reshape to (B, T, n_head, hs)
++        k = k.view(B, T, self.n_head, C // self.n_head)
++        q = q.view(B, T, self.n_head, C // self.n_head)
++        v = v.view(B, T, self.n_head, C // self.n_head)
++        # Merge consecutive pairs (2i, 2i+1) by averaging, then replicate back
++        # Process pairs for first T//2*2 vectors, keep remainder unchanged if T is odd
++        T_pairs = T // 2 * 2
++        k_pairs = k[:, :T_pairs].view(B, T_pairs//2, 2, self.n_head, C // self.n_head).mean(dim=2).repeat_interleave(2, dim=1)
++        q_pairs = q[:, :T_pairs].view(B, T_pairs//2, 2, self.n_head, C // self.n_head).mean(dim=2).repeat_interleave(2, dim=1)
++        v_pairs = v[:, :T_pairs].view(B, T_pairs//2, 2, self.n_head, C // self.n_head).mean(dim=2).repeat_interleave(2, dim=1)
++        k = torch.cat([k_pairs, k[:, T_pairs:]], dim=1)
++        q = torch.cat([q_pairs, q[:, T_pairs:]], dim=1)
++        v = torch.cat([v_pairs, v[:, T_pairs:]], dim=1)
++        # Transpose to (B, nh, T, hs)
++        k = k.transpose(1, 2) # (B, nh, T, hs)
++        q = q.transpose(1, 2) # (B, nh, T, hs)
++        v = v.transpose(1, 2) # (B, nh, T, hs)
++
++
++
++        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
++        if self.flash:
++            # efficient attention using Flash Attention CUDA kernels
++            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
++        else:
++            # manual implementation of attention
++            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
++            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
++            att = F.softmax(att, dim=-1)
++            att = self.attn_dropout(att)
++            y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
++        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
++
++        # output projection
++        y = self.resid_dropout(self.c_proj(y))
++        return y
++
++
++
++class CausalSelfAttentionMerged(CausalSelfAttention):
++
++    def __init__(self, config):
++        super().__init__()
++        
+     def forward(self, x):
+         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
+ 
+@@ -58,6 +107,8 @@ class CausalSelfAttention(nn.Module):
+         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+ 
++        
++
+         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+         if self.flash:
+             # efficient attention using Flash Attention CUDA kernels
+@@ -75,6 +126,8 @@ class CausalSelfAttention(nn.Module):
+         y = self.resid_dropout(self.c_proj(y))
+         return y
+ 
++
++
+ class MLP(nn.Module):
+ 
+     def __init__(self, config):
+@@ -96,7 +149,7 @@ class Block(nn.Module):
+     def __init__(self, config):
+         super().__init__()
+         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
+-        self.attn = CausalSelfAttention(config)
++        self.attn = CausalSelfAttention(config) if not config.merged_attn else CausalSelfAttentionMerged(config)
+         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
+         self.mlp = MLP(config)
+ 
+@@ -114,7 +167,8 @@ class GPTConfig:
+     n_embd: int = 768
+     dropout: float = 0.0
+     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+-
++    merged_attn: bool = False
++    
+ class GPT(nn.Module):
+ 
+     def __init__(self, config):
+diff --git a/train.py b/train.py
+index de57850..3dfa67c 100644
+--- a/train.py
++++ b/train.py
+@@ -40,7 +40,7 @@ eval_only = False # if True, script exits right after the first eval
+ always_save_checkpoint = True # if True, always save a checkpoint after each eval
+ init_from = 'scratch' # 'scratch' or 'resume' or 'gpt2*'
+ # wandb logging
+-wandb_log = False # disabled by default
++wandb_log = True # disabled by default
+ wandb_project = 'owt'
+ wandb_run_name = 'gpt2' # 'run' + str(time.time())
+ # data
+@@ -71,7 +71,7 @@ backend = 'nccl' # 'nccl', 'gloo', etc.
+ # system
+ device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
+ dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
+-compile = True # use PyTorch 2.0 to compile the model to be faster
++compile = False # use PyTorch 2.0 to compile the model to be faster
+ # -----------------------------------------------------------------------------
+ config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
+ exec(open('configurator.py').read()) # overrides from command line or config file

@@ -1,0 +1,12 @@
+{"time":"2025-11-17T13:52:54.271040095-06:00","level":"INFO","msg":"using version","core version":"0.18.5"}
+{"time":"2025-11-17T13:52:54.271067677-06:00","level":"INFO","msg":"created symlink","path":"/work1/sawmya/czhang/6.4610/Multi-resolution-Attention/external/nanogpt/wandb/run-20251117_135254-92trtbig/logs/debug-core.log"}
+{"time":"2025-11-17T13:52:54.382310654-06:00","level":"INFO","msg":"created new stream","id":"92trtbig"}
+{"time":"2025-11-17T13:52:54.382351262-06:00","level":"INFO","msg":"stream: started","id":"92trtbig"}
+{"time":"2025-11-17T13:52:54.382461961-06:00","level":"INFO","msg":"sender: started","stream_id":"92trtbig"}
+{"time":"2025-11-17T13:52:54.382404322-06:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"92trtbig"}}
+{"time":"2025-11-17T13:52:54.382444237-06:00","level":"INFO","msg":"handler: started","stream_id":{"value":"92trtbig"}}
+{"time":"2025-11-17T13:52:54.651632032-06:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-11-17T13:52:54.675728422-06:00","level":"ERROR","msg":"error getting latest commit","error":"exit status 128"}
+{"time":"2025-11-17T13:55:45.500594424-06:00","level":"INFO","msg":"stream: closing","id":"92trtbig"}
+{"time":"2025-11-17T13:55:45.500642274-06:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-11-17T13:55:45.662645743-06:00","level":"INFO","msg":"Stopped system monitor"}

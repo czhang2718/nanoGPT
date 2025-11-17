@@ -1,0 +1,20 @@
+{"time":"2025-11-17T14:20:57.45813726-06:00","level":"INFO","msg":"using version","core version":"0.18.5"}
+{"time":"2025-11-17T14:20:57.458162368-06:00","level":"INFO","msg":"created symlink","path":"/work1/sawmya/czhang/6.4610/Multi-resolution-Attention/external/nanogpt/wandb/run-20251117_142057-3lc0yhof/logs/debug-core.log"}
+{"time":"2025-11-17T14:20:57.568327766-06:00","level":"INFO","msg":"created new stream","id":"3lc0yhof"}
+{"time":"2025-11-17T14:20:57.568369645-06:00","level":"INFO","msg":"stream: started","id":"3lc0yhof"}
+{"time":"2025-11-17T14:20:57.568384032-06:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"3lc0yhof"}}
+{"time":"2025-11-17T14:20:57.568442924-06:00","level":"INFO","msg":"sender: started","stream_id":"3lc0yhof"}
+{"time":"2025-11-17T14:20:57.568434848-06:00","level":"INFO","msg":"handler: started","stream_id":{"value":"3lc0yhof"}}
+{"time":"2025-11-17T14:20:58.043297395-06:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-11-17T14:20:58.060932636-06:00","level":"ERROR","msg":"error getting latest commit","error":"exit status 128"}
+{"time":"2025-11-17T14:30:34.463066208-06:00","level":"INFO","msg":"stream: closing","id":"3lc0yhof"}
+{"time":"2025-11-17T14:30:34.463123055-06:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-11-17T14:30:34.463641206-06:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-11-17T14:30:35.097220608-06:00","level":"ERROR","msg":"error adding file to cache","err":"open /home1/czhang/.cache/wandb/artifacts/tmp/1139477523: no space left on device"}
+{"time":"2025-11-17T14:30:35.100404637-06:00","level":"ERROR","msg":"error adding file to cache","err":"open /home1/czhang/.cache/wandb/artifacts/tmp/2724818149: no space left on device"}
+{"time":"2025-11-17T14:30:35.102359789-06:00","level":"ERROR","msg":"error adding file to cache","err":"open /home1/czhang/.cache/wandb/artifacts/tmp/612323155: no space left on device"}
+{"time":"2025-11-17T14:30:36.24256059-06:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-11-17T14:30:36.379930567-06:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"3lc0yhof"}}
+{"time":"2025-11-17T14:30:36.379961395-06:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"3lc0yhof"}}
+{"time":"2025-11-17T14:30:36.3800278-06:00","level":"INFO","msg":"sender: closed","stream_id":"3lc0yhof"}
+{"time":"2025-11-17T14:30:36.380036908-06:00","level":"INFO","msg":"stream: closed","id":"3lc0yhof"}

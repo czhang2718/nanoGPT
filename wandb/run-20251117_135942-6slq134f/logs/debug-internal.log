@@ -1,0 +1,9 @@
+{"time":"2025-11-17T13:59:42.031055243-06:00","level":"INFO","msg":"using version","core version":"0.18.5"}
+{"time":"2025-11-17T13:59:42.031084027-06:00","level":"INFO","msg":"created symlink","path":"/work1/sawmya/czhang/6.4610/Multi-resolution-Attention/external/nanogpt/wandb/run-20251117_135942-6slq134f/logs/debug-core.log"}
+{"time":"2025-11-17T13:59:42.141317455-06:00","level":"INFO","msg":"created new stream","id":"6slq134f"}
+{"time":"2025-11-17T13:59:42.141355988-06:00","level":"INFO","msg":"stream: started","id":"6slq134f"}
+{"time":"2025-11-17T13:59:42.141392838-06:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"6slq134f"}}
+{"time":"2025-11-17T13:59:42.141788446-06:00","level":"INFO","msg":"sender: started","stream_id":"6slq134f"}
+{"time":"2025-11-17T13:59:42.141780762-06:00","level":"INFO","msg":"handler: started","stream_id":{"value":"6slq134f"}}
+{"time":"2025-11-17T13:59:42.361874512-06:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-11-17T13:59:42.381925767-06:00","level":"ERROR","msg":"error getting latest commit","error":"exit status 128"}

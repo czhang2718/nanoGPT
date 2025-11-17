@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/work1/sawmya/czhang/6.4610/Multi-resolution-Attention/external/nanogpt/train.py", line 264, in <module>
+    losses = estimate_loss()
+             ^^^^^^^^^^^^^^^
+  File "/work1/sawmya/czhang/micromamba/envs/rebm/lib/python3.11/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/work1/sawmya/czhang/6.4610/Multi-resolution-Attention/external/nanogpt/train.py", line 225, in estimate_loss
+    losses[k] = loss.item()
+                ^^^^^^^^^^^
+KeyboardInterrupt

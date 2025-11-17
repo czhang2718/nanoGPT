@@ -58,6 +58,8 @@ class CausalSelfAttention(nn.Module):
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
+
+
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         if self.flash:
             # efficient attention using Flash Attention CUDA kernels
@@ -74,6 +76,55 @@ class CausalSelfAttention(nn.Module):
         # output projection
         y = self.resid_dropout(self.c_proj(y))
         return y
+
+
+
+class CausalSelfAttentionMerged(CausalSelfAttention):
+
+    def __init__(self, config):
+        super().__init__()
+        
+    def forward(self, x):
+        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
+
+        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
+        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)
+        # Reshape to (B, T, n_head, hs)
+        k = k.view(B, T, self.n_head, C // self.n_head)
+        q = q.view(B, T, self.n_head, C // self.n_head)
+        v = v.view(B, T, self.n_head, C // self.n_head)
+        # Merge consecutive pairs (2i, 2i+1) by averaging, then replicate back
+        # Process pairs for first T//2*2 vectors, keep remainder unchanged if T is odd
+        T_pairs = T // 2 * 2
+        k_pairs = k[:, :T_pairs].view(B, T_pairs//2, 2, self.n_head, C // self.n_head).mean(dim=2).repeat_interleave(2, dim=1)
+        q_pairs = q[:, :T_pairs].view(B, T_pairs//2, 2, self.n_head, C // self.n_head).mean(dim=2).repeat_interleave(2, dim=1)
+        v_pairs = v[:, :T_pairs].view(B, T_pairs//2, 2, self.n_head, C // self.n_head).mean(dim=2).repeat_interleave(2, dim=1)
+        k = torch.cat([k_pairs, k[:, T_pairs:]], dim=1)
+        q = torch.cat([q_pairs, q[:, T_pairs:]], dim=1)
+        v = torch.cat([v_pairs, v[:, T_pairs:]], dim=1)
+        # Transpose to (B, nh, T, hs)
+        k = k.transpose(1, 2) # (B, nh, T, hs)
+        q = q.transpose(1, 2) # (B, nh, T, hs)
+        v = v.transpose(1, 2) # (B, nh, T, hs)
+
+        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+        if self.flash:
+            # efficient attention using Flash Attention CUDA kernels
+            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
+        else:
+            # manual implementation of attention
+            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+            att = F.softmax(att, dim=-1)
+            att = self.attn_dropout(att)
+            y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+
+        # output projection
+        y = self.resid_dropout(self.c_proj(y))
+        return y
+
+
 
 class MLP(nn.Module):
 
@@ -96,7 +147,7 @@ class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
-        self.attn = CausalSelfAttention(config)
+        self.attn = CausalSelfAttention(config) if not config.merged_attn else CausalSelfAttentionMerged(config)
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
         self.mlp = MLP(config)
 
@@ -114,7 +165,8 @@ class GPTConfig:
     n_embd: int = 768
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
-
+    merged_attn: bool = False
+    
 class GPT(nn.Module):
 
     def __init__(self, config):

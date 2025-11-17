@@ -1,0 +1,20 @@
+{"time":"2025-11-17T14:03:33.308066559-06:00","level":"INFO","msg":"using version","core version":"0.18.5"}
+{"time":"2025-11-17T14:03:33.308093962-06:00","level":"INFO","msg":"created symlink","path":"/work1/sawmya/czhang/6.4610/Multi-resolution-Attention/external/nanogpt/wandb/run-20251117_140333-rj1i25tv/logs/debug-core.log"}
+{"time":"2025-11-17T14:03:33.419698354-06:00","level":"INFO","msg":"created new stream","id":"rj1i25tv"}
+{"time":"2025-11-17T14:03:33.41973873-06:00","level":"INFO","msg":"stream: started","id":"rj1i25tv"}
+{"time":"2025-11-17T14:03:33.419862144-06:00","level":"INFO","msg":"sender: started","stream_id":"rj1i25tv"}
+{"time":"2025-11-17T14:03:33.419796971-06:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"rj1i25tv"}}
+{"time":"2025-11-17T14:03:33.419826907-06:00","level":"INFO","msg":"handler: started","stream_id":{"value":"rj1i25tv"}}
+{"time":"2025-11-17T14:03:33.830274217-06:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-11-17T14:03:33.848647967-06:00","level":"ERROR","msg":"error getting latest commit","error":"exit status 128"}
+{"time":"2025-11-17T14:03:45.464523835-06:00","level":"INFO","msg":"stream: closing","id":"rj1i25tv"}
+{"time":"2025-11-17T14:03:45.464598035-06:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-11-17T14:03:45.465494942-06:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-11-17T14:03:46.138270147-06:00","level":"ERROR","msg":"error adding file to cache","err":"open /home1/czhang/.cache/wandb/artifacts/tmp/3983876416: no space left on device"}
+{"time":"2025-11-17T14:03:46.141593626-06:00","level":"ERROR","msg":"error adding file to cache","err":"open /home1/czhang/.cache/wandb/artifacts/tmp/788490411: no space left on device"}
+{"time":"2025-11-17T14:03:46.143552964-06:00","level":"ERROR","msg":"error adding file to cache","err":"open /home1/czhang/.cache/wandb/artifacts/tmp/3488624882: no space left on device"}
+{"time":"2025-11-17T14:03:47.387772853-06:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-11-17T14:03:47.61104581-06:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"rj1i25tv"}}
+{"time":"2025-11-17T14:03:47.611063373-06:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"rj1i25tv"}}
+{"time":"2025-11-17T14:03:47.611089523-06:00","level":"INFO","msg":"sender: closed","stream_id":"rj1i25tv"}
+{"time":"2025-11-17T14:03:47.611166088-06:00","level":"INFO","msg":"stream: closed","id":"rj1i25tv"}
