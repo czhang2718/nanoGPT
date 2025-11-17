@@ -1,9 +1,0 @@
-{"time":"2025-11-17T14:19:32.572957651-06:00","level":"INFO","msg":"using version","core version":"0.18.5"}
-{"time":"2025-11-17T14:19:32.572986115-06:00","level":"INFO","msg":"created symlink","path":"/work1/sawmya/czhang/6.4610/Multi-resolution-Attention/external/nanogpt/wandb/run-20251117_141932-zsum5vh5/logs/debug-core.log"}
-{"time":"2025-11-17T14:19:32.684066056-06:00","level":"INFO","msg":"created new stream","id":"zsum5vh5"}
-{"time":"2025-11-17T14:19:32.684104408-06:00","level":"INFO","msg":"stream: started","id":"zsum5vh5"}
-{"time":"2025-11-17T14:19:32.684159713-06:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"zsum5vh5"}}
-{"time":"2025-11-17T14:19:32.684548198-06:00","level":"INFO","msg":"handler: started","stream_id":{"value":"zsum5vh5"}}
-{"time":"2025-11-17T14:19:32.684617469-06:00","level":"INFO","msg":"sender: started","stream_id":"zsum5vh5"}
-{"time":"2025-11-17T14:19:33.134281034-06:00","level":"INFO","msg":"Starting system monitor"}
-{"time":"2025-11-17T14:19:33.153282523-06:00","level":"ERROR","msg":"error getting latest commit","error":"exit status 128"}
