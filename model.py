@@ -31,6 +31,7 @@ class CausalSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         assert config.n_embd % config.n_head == 0
+        self.config = config
         # key, query, value projections for all heads, but in a batch
         self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)
         # output projection
@@ -78,49 +79,197 @@ class CausalSelfAttention(nn.Module):
         return y
 
 
-
 class CausalSelfAttentionMerged(CausalSelfAttention):
 
     def __init__(self, config):
-        super().__init__()
+        print("Using Pairwise Shifted Merged Attention (window size 2)")
+        super().__init__(config)
         
     def forward(self, x):
-        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
+        B, T, C = x.size()  # batch size, sequence length, embedding dimensionality (n_embd)
 
-        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)
+        # calculate query, key, values for all heads in batch
+        q, k, v = self.c_attn(x).split(self.n_embd, dim=2)
         # Reshape to (B, T, n_head, hs)
-        k = k.view(B, T, self.n_head, C // self.n_head)
-        q = q.view(B, T, self.n_head, C // self.n_head)
-        v = v.view(B, T, self.n_head, C // self.n_head)
-        # Merge consecutive pairs (2i, 2i+1) by averaging, then replicate back
-        # Process pairs for first T//2*2 vectors, keep remainder unchanged if T is odd
-        T_pairs = T // 2 * 2
-        k_pairs = k[:, :T_pairs].view(B, T_pairs//2, 2, self.n_head, C // self.n_head).mean(dim=2).repeat_interleave(2, dim=1)
-        q_pairs = q[:, :T_pairs].view(B, T_pairs//2, 2, self.n_head, C // self.n_head).mean(dim=2).repeat_interleave(2, dim=1)
-        v_pairs = v[:, :T_pairs].view(B, T_pairs//2, 2, self.n_head, C // self.n_head).mean(dim=2).repeat_interleave(2, dim=1)
-        k = torch.cat([k_pairs, k[:, T_pairs:]], dim=1)
-        q = torch.cat([q_pairs, q[:, T_pairs:]], dim=1)
-        v = torch.cat([v_pairs, v[:, T_pairs:]], dim=1)
-        # Transpose to (B, nh, T, hs)
-        k = k.transpose(1, 2) # (B, nh, T, hs)
-        q = q.transpose(1, 2) # (B, nh, T, hs)
-        v = v.transpose(1, 2) # (B, nh, T, hs)
+        hs = C // self.n_head
+        q = q.view(B, T, self.n_head, hs)
+        k = k.view(B, T, self.n_head, hs)
+        v = v.view(B, T, self.n_head, hs)
 
-        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+        # --- causal pairwise merging via shifted window [i-1, i] ---
+        # previous token (for i=0, use itself so we don't roll in the future)
+        q_prev = torch.cat([q[:, :1], q[:, :-1]], dim=1)  # (B, T, n_head, hs)
+        k_prev = torch.cat([k[:, :1], k[:, :-1]], dim=1)
+        v_prev = torch.cat([v[:, :1], v[:, :-1]], dim=1)
+
+        # average current and previous -> merged q/k/v
+        q = 0.5 * (q + q_prev)
+        k = 0.5 * (k + k_prev)
+        v = 0.5 * (v + v_prev)
+
+        # Transpose to (B, nh, T, hs)
+        q = q.transpose(1, 2)  # (B, nh, T, hs)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+
+        # causal self-attention as usual
         if self.flash:
-            # efficient attention using Flash Attention CUDA kernels
-            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
+            y = torch.nn.functional.scaled_dot_product_attention(
+                q, k, v,
+                attn_mask=None,
+                dropout_p=self.dropout if self.training else 0.0,
+                is_causal=True,
+            )
         else:
-            # manual implementation of attention
             att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+            att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float('-inf'))
             att = F.softmax(att, dim=-1)
             att = self.attn_dropout(att)
-            y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
-        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+            y = att @ v  # (B, nh, T, hs)
+
+        y = y.transpose(1, 2).contiguous().view(B, T, C)  # (B, T, C)
 
         # output projection
+        y = self.resid_dropout(self.c_proj(y))
+        return y
+
+
+
+class CausalSelfAttentionMergedHierarchy(CausalSelfAttention):
+    """
+    Hierarchical, *causal* merging attention.
+
+    For each token i in the global region [0, g):
+        - Compute a hierarchy level h(i) via alpha, capped at kappa.
+        - Define window size w(i) = 2^h(i).
+        - Merge q/k/v over the causal window [i - w(i) + 1, i] (clamped at 0).
+          => max lookback is 2^kappa - 1 tokens.
+    Local region [g, T) uses w(i) = 1 (no merging).
+    """
+
+    def __init__(self, config):
+        print("Using Hierarchical Shifted Merged Attention")
+        super().__init__(config)
+        self.local_window = getattr(config, "local_window", 128)
+        self.alpha = float(getattr(config, "alpha", 2.0))
+        self.kappa = int(getattr(config, "kappa", 3))
+
+    def _compute_allowed_levels(self, global_len: int):
+        """
+        For each position i in [0, global_len), compute max allowed level h(i):
+
+            Δ_i = (global_len - 1 - i)   # distance from global cutoff
+            h(i) = floor( log_alpha(1 + Δ_i) ), capped at kappa
+        """
+        allowed = []
+        if global_len <= 0:
+            return allowed
+
+        if self.alpha <= 1.0:
+            return [0 for _ in range(global_len)]
+
+        log_alpha = math.log(self.alpha)
+        for i in range(global_len):
+            delta = global_len - 1 - i
+            h = int(math.floor(math.log(1.0 + float(delta)) / log_alpha))
+            h = min(h, self.kappa)
+            allowed.append(h)
+        return allowed
+
+    def forward(self, x):
+        B, T, C = x.size()
+        hs = C // self.n_head
+
+        # define global/local split
+        local_window = min(self.local_window, T)
+        g = T - local_window                 # global region: [0, g), local: [g, T)
+        global_len = g
+
+        # if no global region, just do vanilla attention
+        if global_len <= 0:
+            return super().forward(x)
+
+        # q, k, v as (B, T, n_head, hs)
+        q, k, v = self.c_attn(x).split(self.n_embd, dim=2)
+        q = q.view(B, T, self.n_head, hs)
+        k = k.view(B, T, self.n_head, hs)
+        v = v.view(B, T, self.n_head, hs)
+
+        # ---- compute per-position window sizes (block_sizes) ----
+        # default: no merging (window size 1)
+        device = x.device
+        block_sizes = torch.ones(T, dtype=torch.long, device=device)
+
+        # allowed levels for global positions
+        allowed = self._compute_allowed_levels(global_len)  # len = global_len
+
+        for i in range(global_len):
+            level = allowed[i]
+            w = 2 ** level            # window size = 2^h(i)
+            w = min(w, i + 1)         # can't look beyond beginning
+            block_sizes[i] = w
+
+        # positions >= global_len keep window size 1
+
+        # indices for sliding causal windows [start_i, i]
+        idx = torch.arange(T, device=device)
+        start_idx = idx - (block_sizes - 1)
+        start_idx = torch.clamp(start_idx, min=0)           # (T,)
+
+        # ---- do sliding-window average for q/k/v via prefix sums ----
+        BN = B * self.n_head
+
+        def merge_tensor(t):
+            # t: (B, T, n_head, hs) -> (BN, T, hs)
+            t_flat = t.permute(0, 2, 1, 3).reshape(BN, T, hs)
+            cumsum = t_flat.cumsum(dim=1)                  # prefix sums
+
+            end_idx = idx
+            end_vals = cumsum[:, end_idx, :]               # (BN, T, hs)
+
+            start_minus1 = torch.clamp(start_idx - 1, min=0)
+            start_all = cumsum[:, start_minus1, :]         # (BN, T, hs)
+
+            # zero where window starts at 0 (no previous prefix to subtract)
+            mask_zero = (start_idx == 0).view(1, T, 1)
+            start_vals = torch.where(mask_zero,
+                                     torch.zeros_like(start_all),
+                                     start_all)
+
+            sums = end_vals - start_vals                   # window sums
+            denom = block_sizes.view(1, T, 1).to(t_flat.dtype)
+            merged = sums / denom                          # window average
+
+            # back to (B, T, n_head, hs)
+            merged = merged.reshape(B, self.n_head, T, hs).permute(0, 2, 1, 3)
+            return merged
+
+        q_merged = merge_tensor(q)
+        k_merged = merge_tensor(k)
+        v_merged = merge_tensor(v)
+
+        # ---- run standard causal attention on merged q/k/v ----
+        qh = q_merged.transpose(1, 2)  # (B, n_head, T, hs)
+        kh = k_merged.transpose(1, 2)
+        vh = v_merged.transpose(1, 2)
+
+        if self.flash:
+            y = torch.nn.functional.scaled_dot_product_attention(
+                qh, kh, vh,
+                attn_mask=None,
+                dropout_p=self.dropout if self.training else 0.0,
+                is_causal=True,
+            )
+        else:
+            att = (qh @ kh.transpose(-2, -1)) * (1.0 / math.sqrt(kh.size(-1)))
+            att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float('-inf'))
+            att = F.softmax(att, dim=-1)
+            att = self.attn_dropout(att)
+            y = att @ vh  # (B, n_head, T, hs)
+
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
+
+        # output projection + residual dropout
         y = self.resid_dropout(self.c_proj(y))
         return y
 
@@ -147,7 +296,7 @@ class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
-        self.attn = CausalSelfAttention(config) if not config.merged_attn else CausalSelfAttentionMerged(config)
+        self.attn = CausalSelfAttention(config) if not config.merged_attn else CausalSelfAttentionMergedHierarchy(config)
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
         self.mlp = MLP(config)
 
@@ -165,7 +314,11 @@ class GPTConfig:
     n_embd: int = 768
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
-    merged_attn: bool = False
+    merged_attn: bool = True
+
+    local_window: int = 128   # number of most recent tokens kept at full resolution
+    alpha: float = 2.0        # base for log distance -> level mapping
+    kappa: int = 3            # maximum hierarchy level
     
 class GPT(nn.Module):
 

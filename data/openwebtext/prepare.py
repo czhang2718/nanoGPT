@@ -1,5 +1,5 @@
 import os
-os.environ["HF_HOME"] = "/work1/sawyma/czhang/data"
+os.environ["HF_HOME"] = "/data/scratch-oc40/htfan/hf_home"
 
 from datasets import load_dataset
 

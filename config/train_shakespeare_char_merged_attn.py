@@ -17,6 +17,7 @@ dataset = 'shakespeare_char'
 gradient_accumulation_steps = 1
 batch_size = 64
 block_size = 256 # context of up to 256 previous characters
+# merged_attn = False
 merged_attn = True
 
 # baby GPT model :)
@@ -36,3 +37,9 @@ warmup_iters = 100 # not super necessary potentially
 # on macbook also add
 # device = 'cpu'  # run on cpu only
 # compile = False # do not torch compile the model
+
+# Hierarchy
+alpha = 2.0
+kappa = 3
+
+local_window = 128
