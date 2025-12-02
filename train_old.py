@@ -27,55 +27,33 @@ import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
-from model import GPTConfig, GPT, CausalSelfAttention, CausalSelfAttentionMerged, CausalSelfAttentionShifted, CausalSelfAttentionMergedHierarchy    
+from model import GPTConfig, GPT
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O
 out_dir = 'out'
-eval_interval = 250
-log_interval = 10
+eval_interval = 2000
+log_interval = 1
 eval_iters = 200
 eval_only = False # if True, script exits right after the first eval
 always_save_checkpoint = True # if True, always save a checkpoint after each eval
 init_from = 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 # wandb logging
-wandb_log = True # disabled by default
+wandb_log = False # disabled by default
 wandb_project = 'owt'
 wandb_run_name = 'gpt2' # 'run' + str(time.time())
 # data
-dataset = 'shakespeare_char'
-# dataset = 'openwebtext'
-gradient_accumulation_steps = 1 # used to simulate larger batch sizes
-# gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
-batch_size = 64 # if gradient_accumulation_steps > 1, this is the micro-batch size
-# batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
-block_size = 256
-# block_size = 1024
+dataset = 'openwebtext'
+gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
+batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
+block_size = 1024
 # model
-# n_layer = 12
-# n_head = 12
-# n_embd = 768
 n_layer = 12
-n_head = 6
-n_embd = 384
+n_head = 12
+n_embd = 768
 dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 bias = False # do we use bias inside LayerNorm and Linear layers?
-
-attn = 'hierarchy' # use merged attention (merge pairs before attention, then expand)
-# hierarchy attention only configs
-kappa = 4
-alpha = 2
-local_window = 8
-
-
-attn_classes = {
-    'normal': CausalSelfAttention,
-    'merge_shift': CausalSelfAttentionShifted,
-    'merge': CausalSelfAttentionMerged,
-    'hierarchy': CausalSelfAttentionMergedHierarchy,
-}
-attn_class = attn_classes[attn]
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -93,7 +71,7 @@ backend = 'nccl' # 'nccl', 'gloo', etc.
 # system
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
-compile = False # use PyTorch 2.0 to compile the model to be faster
+compile = True # use PyTorch 2.0 to compile the model to be faster
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
@@ -134,7 +112,7 @@ ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torc
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
 # poor man's data loader
-data_dir = os.path.join('/data/scratch-oc40/htfan/class/nanoGPT/data', dataset)
+data_dir = os.path.join('data', dataset)
 def get_batch(split):
     # We recreate np.memmap every batch to avoid a memory leak, as per
     # https://stackoverflow.com/questions/45132940/numpy-memmap-memory-usage-want-to-iterate-once/61472122#61472122
@@ -167,7 +145,7 @@ if os.path.exists(meta_path):
 
 # model init
 model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
-                  bias=bias, vocab_size=None, dropout=dropout, attn=attn) # start with model_args from command line
+                  bias=bias, vocab_size=None, dropout=dropout) # start with model_args from command line
 if init_from == 'scratch':
     # init a new model from scratch
     print("Initializing a new model from scratch")
@@ -292,7 +270,7 @@ while True:
                 "val/loss": losses['val'],
                 "lr": lr,
                 "mfu": running_mfu*100, # convert to percentage
-            }, step = iter_num * tokens_per_iter) # number of tokens processed so far
+            })
         if losses['val'] < best_val_loss or always_save_checkpoint:
             best_val_loss = losses['val']
             if iter_num > 0:
