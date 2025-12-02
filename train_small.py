@@ -34,8 +34,8 @@ from model import GPTConfig, GPT, CausalSelfAttention, CausalSelfAttentionMerged
 # I/O
 out_dir = 'out'
 
-eval_interval = 2000
-log_interval = 1
+eval_interval = 250
+log_interval = 10
 eval_iters = 200
 
 eval_only = False # if True, script exits right after the first eval
@@ -46,29 +46,29 @@ wandb_log = True # disabled by default
 wandb_project = 'owt'
 wandb_run_name = 'gpt2' # 'run' + str(time.time())
 # data
-# dataset = 'shakespeare_char'
-dataset = 'openwebtext'
-# gradient_accumulation_steps = 1 # used to simulate larger batch sizes
-gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
-# batch_size = 64 # if gradient_accumulation_steps > 1, this is the micro-batch size
-batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
-# block_size = 256
-block_size = 1024
+dataset = 'shakespeare_char'
+# dataset = 'openwebtext'
+gradient_accumulation_steps = 1 # used to simulate larger batch sizes
+# gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
+batch_size = 64 # if gradient_accumulation_steps > 1, this is the micro-batch size
+# batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
+block_size = 256
+# block_size = 1024
 # model
-n_layer = 12
-n_head = 12
-n_embd = 768
 # n_layer = 12
-# n_head = 6
-# n_embd = 384
+# n_head = 12
+# n_embd = 768
+n_layer = 12
+n_head = 6
+n_embd = 384
 dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 bias = False # do we use bias inside LayerNorm and Linear layers?
 
-attn = 'normal' # use merged attention (merge pairs before attention, then expand)
+attn = 'hierarchy' # use merged attention (merge pairs before attention, then expand)
 # hierarchy attention only configs
-kappa = 2
-alpha = 8
-local_window = 16
+kappa = 3
+alpha = 2
+local_window = 128
 
 
 attn_classes = {

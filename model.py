@@ -392,6 +392,8 @@ class CausalSelfAttentionMergedHierarchy(CausalSelfAttention):
         self.alpha = float(getattr(config, "alpha", 2.0))
         self.local_window = getattr(config, "local_window", 128)
 
+        print(f"Using Hierarchical Merged Attention: kappa={self.kappa}, alpha={self.alpha}, local_window={self.local_window}")
+
     @staticmethod
     def _build_hierarchy(k, v, kappa):
         """
@@ -506,20 +508,77 @@ class CausalSelfAttentionMergedHierarchy(CausalSelfAttention):
 
         # --- Alpha gating: blocks at level i require d >= alpha^i ---
         level_ids_f = level_ids.to(torch.float32)
-        # alpha^level for each block (same across all t)
         alpha_pows = (torch.ones_like(level_ids_f) * self.alpha).pow(level_ids_f)  # [L_total]
         alpha_pows_mat = alpha_pows.unsqueeze(0)                                   # [1, L_total]
 
-        is_level0   = (level_ids == 0).unsqueeze(0)  # [1, L_total]
-        is_level_ge1 = ~is_level0                    # [1, L_total]
+        is_level0    = (level_ids == 0).unsqueeze(0)  # [1, L_total]
+        is_level_ge1 = ~is_level0                     # [1, L_total]
 
         # Level 0 is always allowed (subject to causality).
         # For levels >=1: block must be entirely before the window AND far enough:
         #   pre_window & (d >= alpha^level)
         allowed_level = is_level0 | (pre_window & is_level_ge1 & (d >= alpha_pows_mat))
 
-        # Final allowed mask
-        use_ok = causal_ok & allowed_level          # [T, L_total]
+        # Base allowed mask (causality + local/alpha gating)
+        use_ok = causal_ok & allowed_level          # [T, L_total], bool
+
+        # ============================================================
+        # OVERRIDING BEHAVIOR (no LxL matrices, hierarchical + linear)
+        # ============================================================
+
+        # 1. Split `use_ok` back into per-level slices.
+        level_offsets = []
+        offset = 0
+        for L_len in level_lengths:
+            level_offsets.append(offset)
+            offset += L_len
+
+        use_ok_levels = [
+            use_ok[:, level_offsets[i]: level_offsets[i] + level_lengths[i]].bool()
+            for i in range(num_levels)
+        ]
+
+        # 2. Process from coarsest level (highest index) down to finest (0).
+        #    `coverage` at level i means: this block is already covered by some
+        #    strictly higher-level block (i+1, i+2, ...).
+        final_levels = [None] * num_levels
+        coverage = torch.zeros_like(use_ok_levels[-1], dtype=torch.bool)  # for top level: no higher coverage
+
+        for li in range(num_levels - 1, -1, -1):
+            u = use_ok_levels[li]  # [T, n_i]
+
+            # Mask out any block already covered by higher levels.
+            u_final = u & ~coverage
+            final_levels[li] = u_final
+
+            if li > 0:
+                # Any block at this level that is either:
+                #  - used itself (u_final), OR
+                #  - covered by even higher levels (coverage),
+                # will "cover" its children at the next finer level.
+                parent_mask = (u_final | coverage)   # [T, n_parent]
+
+                n_parent = parent_mask.shape[1]
+                n_child  = use_ok_levels[li - 1].shape[1]
+
+                if n_child == 0 or n_parent == 0:
+                    coverage = torch.zeros((T, n_child), device=device, dtype=torch.bool)
+                else:
+                    # Each parent block corresponds to up to 2 child blocks, aligned at the front.
+                    # There may be extra child blocks at the tail that have no parent at this level.
+                    span = min(2 * n_parent, n_child)
+                    cov_child = torch.zeros((T, n_child), device=device, dtype=torch.bool)
+
+                    # Only need the parents that actually map into children.
+                    n_par_used = span // 2
+                    if n_par_used > 0:
+                        proj = parent_mask[:, :n_par_used].repeat_interleave(2, dim=1)  # [T, 2*n_par_used]
+                        cov_child[:, : 2 * n_par_used] = proj[:, : 2 * n_par_used]
+
+                    coverage = cov_child  # coverage mask for level (li-1)
+
+        # 3. Re-flatten to [T, L_total] with overriding applied.
+        use_ok = torch.cat(final_levels, dim=1)  # [T, L_total], bool
 
         # --- Apply attention over flattened hierarchy ---
         q_base  = q.transpose(1, 2)                 # [B, H, T, D]
