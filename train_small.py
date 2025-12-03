@@ -43,7 +43,7 @@ always_save_checkpoint = True # if True, always save a checkpoint after each eva
 init_from = 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 # wandb logging
 wandb_log = True # disabled by default
-wandb_project = 'owt'
+wandb_project = 'lsta-shakespeare'
 wandb_run_name = 'gpt2' # 'run' + str(time.time())
 # data
 dataset = 'shakespeare_char'
@@ -52,23 +52,24 @@ gradient_accumulation_steps = 1 # used to simulate larger batch sizes
 # gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 64 # if gradient_accumulation_steps > 1, this is the micro-batch size
 # batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
+# block_size = 32
 block_size = 256
 # block_size = 1024
 # model
 # n_layer = 12
 # n_head = 12
 # n_embd = 768
-n_layer = 12
+n_layer = 3
 n_head = 6
-n_embd = 384
+n_embd = 192
 dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 bias = False # do we use bias inside LayerNorm and Linear layers?
 
 attn = 'hierarchy' # use merged attention (merge pairs before attention, then expand)
 # hierarchy attention only configs
-kappa = 3
+kappa = 1
 alpha = 2
-local_window = 128
+local_window = 1
 
 
 attn_classes = {
@@ -288,15 +289,11 @@ while True:
     if iter_num % eval_interval == 0 and master_process:
         losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
-        # if wandb_log:
-        #     wandb.log({
-        #         "iter": iter_num,
-        #         "train/loss": losses['train'],
-        #         "val/loss": losses['val'],
-        #         "lr": lr,
-        #         "mfu": running_mfu*100, # convert to percentage
-        #     }, step = iter_num * tokens_per_iter
-        #     ) # number of tokens processed so far
+        if wandb_log:
+            wandb.log({
+                "val/loss": losses['val'],
+            }, step = iter_num * tokens_per_iter
+            ) # number of tokens processed so far
         if losses['val'] < best_val_loss or always_save_checkpoint:
             best_val_loss = losses['val']
             if iter_num > 0:

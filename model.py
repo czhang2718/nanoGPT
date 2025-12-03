@@ -580,6 +580,14 @@ class CausalSelfAttentionMergedHierarchy(CausalSelfAttention):
         # 3. Re-flatten to [T, L_total] with overriding applied.
         use_ok = torch.cat(final_levels, dim=1)  # [T, L_total], bool
 
+
+        # # DEBUG
+        # if True:
+        #     # Intentionally make use_ok almost empty to test correctness
+        #     # Make use_ok only ever attend to the first token
+        #     use_ok = torch.zeros_like(use_ok, dtype=torch.bool)
+        #     use_ok[:, 0] = True
+
         # --- Apply attention over flattened hierarchy ---
         q_base  = q.transpose(1, 2)                 # [B, H, T, D]
         K_all_t = K_all.transpose(1, 2)             # [B, H, L_total, D]
@@ -590,13 +598,51 @@ class CausalSelfAttentionMergedHierarchy(CausalSelfAttention):
         attn_mask = torch.zeros(T, L_total, device=device, dtype=mask_dtype)
         attn_mask[~use_ok] = neg_inf               # 0 for allowed, -inf for masked
 
-        if self.flash:
+        # =========================
+        # DEBUG: sparsity check
+        # =========================
+        # if self.training and not hasattr(self, "_debug_sparsity"):
+        # if True:
+        if False:
+            # Print the entire mask in compressed 0 1 form, extract one mask, and print all T by L_total
+            print("Final overridden mask (use_ok):")
+            for t in range(T):
+                row = use_ok[t].to(torch.int32).cpu().numpy()
+                row_str = ''.join(str(x) for x in row.tolist())
+                print(f"t={t:4d}: {row_str}")
+            # 1. Final overridden mask
+            final_true = use_ok.sum().item()
+            final_total = use_ok.numel()
+
+            # 2. Baseline "normal attention" over BASE TOKENS only (T x T causal)
+            baseline_causal = torch.tril(torch.ones(T, T, device=use_ok.device, dtype=torch.bool))
+            baseline_true = baseline_causal.sum().item()
+            baseline_total = baseline_causal.numel()
+
+            # 3. Baseline over FLATTENED BLOCKS (your old causal_ok, no override)
+            baseline_blocks_true = causal_ok.sum().item()
+            baseline_blocks_total = causal_ok.numel()
+
+            print("\n========== ATTENTION SPARSITY DEBUG ==========")
+            print(f"Final OVERRIDDEN mask: {final_true} / {final_total} = {final_true/final_total:.4f}")
+            print(f"Baseline TOKEN causal: {baseline_true} / {baseline_total} = {baseline_true/baseline_total:.4f}")
+            print(f"Baseline BLOCK causal: {baseline_blocks_true} / {baseline_blocks_total} = {baseline_blocks_true/baseline_blocks_total:.4f}")
+            print("=============================================\n")
+            self._debug_sparsity = True  # only once
+    
+        if self.flash and False:
+            # print a small submatrix of attn_mask
+            # print(f"HI! Attn mask shape: {attn_mask.shape}")
+            # print(f"Attn mask sample:\n{attn_mask[:8, :4]}")
             y = torch.nn.functional.scaled_dot_product_attention(
                 q_base, K_all_t, V_all_t,
                 attn_mask=attn_mask,               # [T, L_total], broadcast over B,H
                 dropout_p=self.dropout if self.training else 0.0,
                 is_causal=False                    # causality is encoded in attn_mask
             )
+            # Print a small submatrix of y
+            # print(f"Y shape: {y.shape}")
+            # print(f"Y sample:\n{y[0, 0, :8, :4]}")
         else:
             att = (q_base @ K_all_t.transpose(-2, -1)) * (1.0 / math.sqrt(D))  # [B, H, T, L_total]
             att = att + attn_mask.unsqueeze(0).unsqueeze(0)                    # add mask

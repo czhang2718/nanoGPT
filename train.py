@@ -66,9 +66,9 @@ bias = False # do we use bias inside LayerNorm and Linear layers?
 
 attn = 'normal' # use merged attention (merge pairs before attention, then expand)
 # hierarchy attention only configs
-kappa = 2
-alpha = 8
-local_window = 16
+kappa = 3
+alpha = 4
+local_window = 32
 
 
 attn_classes = {
